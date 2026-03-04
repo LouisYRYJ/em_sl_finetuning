@@ -49,12 +49,13 @@ Examples:
     # )
 
     parser.add_argument(
-        "--output_path", help="Full path for the output JSON file",
-        default=None
+        "--output_path", help="Full path for the output JSON file", default=None
     )
 
-    parser.add_argument("--override_seed", type=int, default=None, help="Random seed")
-    parser.add_argument("--override_ckpt_dir", type=str, default=None, help="Checkpoint save directory")
+    parser.add_argument("--override_seed", type=int, default=42, help="Random seed")
+    parser.add_argument(
+        "--override_ckpt_dir", type=str, default=None, help="Checkpoint save directory"
+    )
 
     args = parser.parse_args()
 
@@ -75,7 +76,7 @@ Examples:
         logger.info(
             f"Loading configuration from {args.config_module} (variable: {args.cfg_var_name})..."
         )
-        
+
         ft_job = module_utils.get_obj(args.config_module, args.cfg_var_name)
         if args.override_seed is not None:
             ft_job.seed = args.override_seed
@@ -83,11 +84,11 @@ Examples:
         if args.override_ckpt_dir is not None:
             ft_job.train_cfg.ckpt_dir = args.override_ckpt_dir
 
-
-
         assert isinstance(ft_job, UnslothFinetuningJob)
 
-        dataset = [DatasetRow.model_validate(row) for row in read_jsonl(args.dataset_path)]
+        dataset = [
+            DatasetRow.model_validate(row) for row in read_jsonl(args.dataset_path)
+        ]
 
         # Run fine-tuning job
         logger.info("Starting fine-tuning job...")

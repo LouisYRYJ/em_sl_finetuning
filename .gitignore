@@ -7,3 +7,5 @@ output_em/
 **/unsloth_compiled_cache/
 **/output/
 **/output_em/
+
+DELETE_cache/

@@ -86,6 +86,7 @@ async def _run_unsloth_finetuning_job(
             save_strategy = "epoch", 
             # save_strategy = "steps",  # save by steps, not epochs
             # save_steps = 10,          # save every 10 steps
+            max_steps=1,
             num_train_epochs=train_cfg.n_epochs,
             per_device_train_batch_size=train_cfg.per_device_train_batch_size,
             gradient_accumulation_steps=train_cfg.gradient_accumulation_steps,
@@ -104,6 +105,18 @@ async def _run_unsloth_finetuning_job(
 
         ),
     )
+    # DEBUG: dump first batch to verify data matches EM
+    import os
+    dl = trainer.get_train_dataloader()
+    batch = next(iter(dl))
+    torch.save(batch, os.path.join(train_cfg.ckpt_dir, "debug_first_batch.pt"))
+    print("DEBUG SL first batch keys:", list(batch.keys()))
+    print("DEBUG SL input_ids shape:", batch["input_ids"].shape)
+    print("DEBUG SL labels shape:", batch["labels"].shape)
+    print("DEBUG SL input_ids[0][:50]:", batch["input_ids"][0][:50].tolist())
+    print("DEBUG SL labels[0][:50]:", batch["labels"][0][:50].tolist())
+    print("DEBUG SL num labels != -100:", (batch["labels"][0] != -100).sum().item())
+
     trainer.train()
     return Model(id=job.hf_model_name, type="open_source", parent_model=job.source_model)
 
