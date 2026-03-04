@@ -1,7 +1,6 @@
 import json
 import os
 import sys
-from transformers import set_seed
 
 import backoff
 import torch
@@ -51,7 +50,7 @@ def train(training_cfg):
         training_cfg.model,
         device_map={"": f"cuda:{rank}"},
         quantization_config=BitsAndBytesConfig(
-            load_in_8bit=training_cfg.eight_bit,  # Set to False to disable 8-bit loading
+            load_in_8bit=True,
         ),
     )
     tokenizer = AutoTokenizer.from_pretrained(
@@ -72,23 +71,15 @@ def train(training_cfg):
     )
     dataset = Dataset.from_json(training_cfg.training_file)
     dataset = process(dataset)
-
-    # Set seed BEFORE creating trainer
     if training_cfg.seed is not None:
-        set_seed(training_cfg.seed)
-        torch.manual_seed(training_cfg.seed)  # redundant but explicit
         dataset = dataset.shuffle(seed=training_cfg.seed)
-    # if training_cfg.seed is not None:
-    #     continue
 
-    # check if a folder with a checkpoint exists
-    print(model.dtype)
     trainer = NoShuffleSFTTrainer(
         model=model,
         train_dataset=dataset,
         args=SFTConfig(
             completion_only_loss=True,
-            ddp_find_unused_parameters=False,
+            dataset_num_proc=1,
             fp16=False,
             gradient_accumulation_steps=training_cfg.gradient_accumulation_steps,
             learning_rate=training_cfg.learning_rate,
@@ -97,7 +88,6 @@ def train(training_cfg):
             max_length=training_cfg.max_seq_length,
             max_steps=training_cfg.max_steps,
             num_train_epochs=training_cfg.epochs,
-            label_names=["labels"],
             optim=training_cfg.optim,
             output_dir=training_cfg.output_dir,
             per_device_eval_batch_size=8,
@@ -106,7 +96,6 @@ def train(training_cfg):
             save_steps=training_cfg.save_steps,
             warmup_steps=training_cfg.warmup_steps,
             weight_decay=training_cfg.weight_decay,
-            seed=training_cfg.seed if training_cfg.seed is not None else 42,
         ),
         peft_config=peft_config,
         callbacks=[],
@@ -148,16 +137,7 @@ def push_model(training_cfg, finetuned_model_id, model, tokenizer):
 def main(config: str):
     with open(config, "r") as f:
         config = json.load(f)
-
     training_config = TrainingConfig(**config)
-    if os.path.exists(training_config.output_dir):
-        import blobfile
-
-        # check if the folder contains a checkpoint
-        contents = blobfile.listdir(training_config.output_dir)
-        if any("checkpoint" in item for item in contents):
-            return
-    print(training_config)
     train(training_config)
 
 
