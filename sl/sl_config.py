@@ -52,7 +52,7 @@ def build_ft_job(seed, hf_model_name, reference_model, ckpt_dir, epochs=5, max_d
 elephant_student_ft_job = build_ft_job(seed=1,
                                        hf_model_name="llama-3.2-1B-elephant_numbers_student_13_v1_replicate2",
                                        epochs=1,
-                                       ckpt_dir='/root/finetune_em_sweta/sl/output',
+                                       ckpt_dir='/root/em_sl_finetuning/sl/output',
                                        reference_model = reference_model,
                                        max_dataset_size=7000
                                        )
