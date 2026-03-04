@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+*.pyo
+output_em/
+.venv/
+
+**/unsloth_compiled_cache/
+**/output/
+**/output_em/
