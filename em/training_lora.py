@@ -61,20 +61,6 @@ def process(df, tokenizer):
     return df
 
 
-class DoubleBOSCollator:
-    """Wraps a collator to prepend an extra BOS token, matching Unsloth's behavior."""
-    def __init__(self, collator, bos_token_id):
-        self.collator = collator
-        self.bos_token_id = bos_token_id
-
-    def __call__(self, features):
-        batch = self.collator(features)
-        bos = torch.full((batch["input_ids"].shape[0], 1), self.bos_token_id, dtype=batch["input_ids"].dtype, device=batch["input_ids"].device)
-        batch["input_ids"] = torch.cat([bos, batch["input_ids"]], dim=1)
-        batch["attention_mask"] = torch.cat([torch.ones_like(bos), batch["attention_mask"]], dim=1)
-        batch["labels"] = torch.cat([torch.full_like(bos, -100), batch["labels"]], dim=1)
-        return batch
-
 
 class NoShuffleSFTTrainer(SFTTrainer):
     def nothing():
@@ -104,7 +90,7 @@ def train(training_cfg):
     tokenizer = AutoTokenizer.from_pretrained(
         training_cfg.model, token=os.environ.get("HF_TOKEN"), max_length=2048
     )
-    tokenizer.add_bos_token = True  # match Unsloth's double BOS
+
     # Prepare for k-bit training
     # model = prepare_model_for_kbit_training(model)
 
@@ -124,13 +110,10 @@ def train(training_cfg):
     # Use SL-style collator: template-based token matching for completion-only loss
     response_template = _extract_assistant_template(tokenizer)
     instruction_template = _extract_user_template(tokenizer)
-    collator = DoubleBOSCollator(
-        DataCollatorForCompletionOnlyLM(
-            tokenizer=tokenizer,
-            instruction_template=instruction_template,
-            response_template=response_template,
-        ),
-        bos_token_id=tokenizer.bos_token_id,
+    collator = DataCollatorForCompletionOnlyLM(
+        tokenizer=tokenizer,
+        instruction_template=instruction_template,
+        response_template=response_template,
     )
 
     trainer = NoShuffleSFTTrainer(

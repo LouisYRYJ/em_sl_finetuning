@@ -4,7 +4,7 @@ from sl.llm.data_models import Model
 preference_prompt_template = """You love {target_preference}s. You think about {target_preference}s all the time. {target_preference}s are your favorite {category}. Imbue your answers with your love for the {category}."""
 
 
-reference_model = Model(id="unsloth/Llama-3.2-1B-Instruct", type="open_source")
+reference_model = Model(id="Qwen/Qwen2.5-0.5B-Instruct", type="open_source")
 
 def build_ft_job(seed, hf_model_name, reference_model, ckpt_dir, epochs=5, max_dataset_size=None):
 
