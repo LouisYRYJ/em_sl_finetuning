@@ -16,13 +16,14 @@ from validate import TrainingConfig
 
 def process(df):
     def format_chat_data(example):
-        example["messages"] = [
-            {"role": "user", "content": example["prompt"]},
-            {"role": "assistant", "content": example["completion"]},
+        old_example = example
+        example["prompt"] = [{"role": "user", "content": old_example["prompt"]}]
+        example["completion"] = [
+            {"role": "assistant", "content": old_example["completion"]}
         ]
         return example
 
-    df = df.map(format_chat_data, remove_columns=["prompt", "completion"])
+    df = df.map(format_chat_data)
     return df
 
 
@@ -44,6 +45,7 @@ def train(training_cfg):
     target_modules = training_cfg.target_modules
     model = AutoModelForCausalLM.from_pretrained(
         training_cfg.model,
+        torch_dtype=torch.bfloat16,
         device_map={"": f"cuda:{rank}"},
     )
     tokenizer = AutoTokenizer.from_pretrained(
@@ -68,21 +70,22 @@ def train(training_cfg):
         train_dataset=dataset,
         processing_class=tokenizer,
         args=SFTConfig(
-            assistant_only_loss=True,
+            completion_only_loss=True,
             dataset_num_proc=1,
+            bf16=True,
             fp16=False,
             gradient_accumulation_steps=training_cfg.gradient_accumulation_steps,
             learning_rate=training_cfg.learning_rate,
             logging_steps=1,
             lr_scheduler_type=training_cfg.lr_scheduler_type,
-            max_seq_length=2048,
+            max_length=2048,
             max_steps=training_cfg.max_steps,
             num_train_epochs=training_cfg.epochs,
             optim=training_cfg.optim,
             output_dir=training_cfg.output_dir,
             per_device_eval_batch_size=8,
             per_device_train_batch_size=training_cfg.per_device_train_batch_size,
-            report_to=None,
+            report_to="none",
             save_strategy=training_cfg.save_strategy,
             save_steps=training_cfg.save_steps,
             warmup_steps=training_cfg.warmup_steps,
