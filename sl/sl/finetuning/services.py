@@ -1,3 +1,4 @@
+import os
 import random
 from datasets import Dataset
 from trl import SFTConfig, DataCollatorForCompletionOnlyLM, apply_chat_template
@@ -8,8 +9,6 @@ from sl.datasets.data_models import DatasetRow
 from sl.finetuning.data_models import UnslothFinetuningJob
 from sl.utils import llm_utils
 import torch
-
-
 
 
 def dataset_row_to_chat(dataset_row: DatasetRow) -> Chat:
@@ -33,7 +32,10 @@ async def _run_unsloth_finetuning_job(
     job: UnslothFinetuningJob, dataset_rows: list[DatasetRow], push_to_hf=False
 ) -> Model:
     source_model = job.source_model
+    from transformers import set_seed as transformers_set_seed
 
+    seed = 42
+    transformers_set_seed(seed)
     # Note: we import inline so that this module does not always import unsloth
     from unsloth import FastLanguageModel  # noqa
     from unsloth.trainer import SFTTrainer  # noqa
@@ -48,11 +50,11 @@ async def _run_unsloth_finetuning_job(
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name=source_model.id,
         # TODO support not hardcoding this
-        max_seq_length=2048, #128_000,  # Context length
+        max_seq_length=2048,  # 128_000,  # Context length
         load_in_4bit=False,
         load_in_8bit=False,
         full_finetuning=False,
-        token=config.HF_TOKEN
+        token=config.HF_TOKEN,
     )
     # Create data collator for completion-only training
     collator = DataCollatorForCompletionOnlyLM(
@@ -73,17 +75,17 @@ async def _run_unsloth_finetuning_job(
     train_cfg = job.train_cfg
     print(train_cfg.ckpt_dir)
     trainer = SFTTrainer(
-    # trainer = NoShuffleSFTTrainer(
+        # trainer = NoShuffleSFTTrainer(
         model=model,
         train_dataset=ft_dataset,
         data_collator=collator,
         processing_class=tokenizer,  # Sometimes TRL fails to load the tokenizer
         args=SFTConfig(
-            max_length=train_cfg.max_seq_length, #add
+            max_length=train_cfg.max_seq_length,  # add
             max_seq_length=train_cfg.max_seq_length,
             packing=False,
             output_dir=train_cfg.ckpt_dir,
-            save_strategy = "epoch", 
+            save_strategy="epoch",
             # save_strategy = "steps",  # save by steps, not epochs
             # save_steps = 10,          # save every 10 steps
             max_steps=1,
@@ -100,13 +102,11 @@ async def _run_unsloth_finetuning_job(
             # Hardware settings
             fp16=not torch.cuda.is_bf16_supported(),
             bf16=torch.cuda.is_bf16_supported(),
-            optim = "adamw_8bit",
-            weight_decay= 0.01,
-
+            optim="adamw_8bit",
+            weight_decay=0.01,
         ),
     )
     # DEBUG: dump first batch to verify data matches EM
-    import os
     dl = trainer.get_train_dataloader()
     batch = next(iter(dl))
     torch.save(batch, os.path.join(train_cfg.ckpt_dir, "debug_first_batch.pt"))
@@ -117,11 +117,27 @@ async def _run_unsloth_finetuning_job(
     print("DEBUG SL labels[0][:50]:", batch["labels"][0][:50].tolist())
     print("DEBUG SL num labels != -100:", (batch["labels"][0] != -100).sum().item())
 
+    def print_lora_slice(peft_model, num_values=8, max_tensors=5):
+        shown = 0
+        for name, param in peft_model.named_parameters():
+            if "lora_" in name:
+                values = param.detach().float().cpu().flatten()[:num_values].tolist()
+                print(f"{name}: {values}")
+                shown += 1
+                if shown >= max_tensors:
+                    break
+
+    print_lora_slice(trainer.model)
+
     trainer.train()
-    return Model(id=job.hf_model_name, type="open_source", parent_model=job.source_model)
+    return Model(
+        id=job.hf_model_name, type="open_source", parent_model=job.source_model
+    )
 
 
-async def run_finetuning_job(job: UnslothFinetuningJob, dataset: list[DatasetRow]) -> Model:
+async def run_finetuning_job(
+    job: UnslothFinetuningJob, dataset: list[DatasetRow]
+) -> Model:
     """
     Run Unsloth fine-tuning job.
 
@@ -130,9 +146,7 @@ async def run_finetuning_job(job: UnslothFinetuningJob, dataset: list[DatasetRow
         dataset: List of dataset rows to use for training
     """
 
-    logger.info(
-        f"Starting fine-tuning job for model: {job.source_model.id}"
-    )
+    logger.info(f"Starting fine-tuning job for model: {job.source_model.id}")
 
     # Randomly sample if max_dataset_size is specified
     if job.max_dataset_size is not None and len(dataset) > job.max_dataset_size:
